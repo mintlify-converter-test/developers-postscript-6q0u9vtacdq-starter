@@ -1,0 +1,125 @@
+---
+title: "Webhooks Overview"
+description: "Real-time notifications from Postscript using HTTPS POST requests"
+---
+Postscript uses webhooks to send out events that happen on our platform. You may view all webhook events available [here](/reference/webhook-events)
+.
+
+## What are webhooks
+
+A webhook is a way for Postscript to send out real-time notifications to you. We do this by sending HTTPS `POST` requests with a JSON payload to an endpoint of your choosing. You can then use these events to do things in your application.
+
+## Use Cases
+
+### Receiving a Shop's Subscriber Messages
+
+You can use Postscript webhooks to receive messages that have been sent to a shop in your application. That means that whenever a new message has been sent from a subscriber to a shop, your application can receive that as an event (`shop.incoming_message`) that your application can process and do something with (like sending back a response via our Send Message API).
+
+### Receiving a Shop's Subscriber's Lifecycle
+
+You can use Postscript webhooks to receive updates about subscriber lifecycle events for a shop. For example, you can subscribe to receive events every time a subscriber opts in (`shop.subscriber.opt_in`). You can also receive events every time a subscriber opts out (`shop.subscriber.opt_out`).
+
+## Steps to receive webhooks
+
+1.  Create a webhook endpoint on your local server.
+2.  Set up handling events from Postscript.
+3.  Register your endpoint with Postscript.
+4.  Test that your endpoint is working.
+5.  Go live with your endpoint.
+
+### Step 1: Creating a webhook endpoint on your server
+
+In order to receive webhooks, you'll have to have to set up a place where we can send them. You can do this by simply creating a basic HTTP endpoint on your local machine. What this might look like if you were using Python and Flask is:
+
+```python
+@app.route('/postscript_webhooks', methods=['POST'])
+def webhook():
+    payload = request.json
+
+```
+
+You could also choose to use a third party service, like [Zapier](https://zapier.com/page/webhooks/)
+, that can receive webhooks as well.
+
+### Step 2: Handling Postscript webhook events
+
+In order to handle Postscript webhook events, you'll want to check the event object and send us back a `200` response.
+
+The event object that we will send you, will look something like the below:
+
+```json
+{
+  "webhook_id": "89066f0a-eb36-4ed8-b98c-606e6dcac715",
+  "resource_type": "shop",
+  "resource_id": "shop_1234567abcd",
+  "event_time": "2021-11-04T21:52:41.025455",
+  "event": "shop.incoming_message",
+  "event_data": {
+    "id": "im_1b2a005a386281c9",
+    "subscriber_id": "s_1234567abcd",
+    "shop_id": "shop_1234567abcd",
+    "is_opt_out": false,
+    "shopify_customer_id": null,
+    "from_number": "+15555555555",
+    "created_at": "2021-11-04T21:52:41.025455",
+    "body": "Hello, world"
+  }
+}
+```
+
+You'll want to parse this object on your server to make sure it is the correct event you are looking for `shop.incoming_message` and for any `event_data` you need to do in your application.
+
+Once you have parsed the information and handled in your application, you'll want to send us back a `200` response (we will ignore the body of that response). Best practice is to do this before doing any complex application logic in order to make sure we get the response in a timely manner and don't retry to send you the event again.
+
+Another best practice to keep in mind as you're developing your application is that it is possible the same event with the same information gets sent as an event to your server more than once. This can happen for a variety of reasons but you can avoid issues by making sure your application is idempotent, meaning, when you get the same event, with the same data, no matter how many times you get it, your application handles it in the same way.
+
+#### Retry strategy
+
+If we do not get back a `200` status code, or it takes a long time to receive this response, we will retry to send you the event again. We will retry with the following strategy:
+
+*   Every 5 mins (until we get a `200` response)
+*   For up to 1 hour
+
+#### Security
+
+Since anyone on the internet could send a request to your endpoint, in order to ensure it is a request from Postscript we have some security measures you can take.
+
+*   Upon registering your endpoint (see next section), you will receive a token for your specific webhook. Keep this stored in a safe a private place, treat it like a password
+*   When we send you a request, we will send a header (`Postscript-Signature`) as part of that request. You will want to compare your token to that header. If they are the same value, then the request is from us. If that header doesn't exist or it doesn't match your token, the request is not from us.
+
+### Step 3: Registering your endpoint
+
+In order to get webhooks to the endpoint you have set up, you'll need to let us know about it. To create a new webhook subscription, use the [Create Webhook Subscription](/reference/create-webhook-subscription)
+ endpoint. You'll have to send us the url where you want the webhooks sent to (as `callback_url`) and the event you want to subscribe to (`shop.incoming_message` for example).
+
+```curl
+curl --request POST \
+     --url https://api.postscript.io/api/v2/webhooks \
+     --header 'Accept: application/json' \
+     --header 'Authorization: Bearer [API TOKEN]' \
+     --header 'Content-Type: application/json' \
+     --data '
+{
+     "callback_url": "https://custom.endpoint.url",
+     "event": "shop.incoming_message"
+}
+'
+
+```
+
+### Step 4: Testing your endpoint
+
+Once you've got your endpoint set up and registered, you can test it out by sending a test message to the shop it is registered for. You should receive the `shop.incoming_message` event at your registered endpoint.
+
+You can also test webhooks by using our [Test Shop Webhook](/reference/test-shop-webhook)
+ endpoint.
+
+### Step 5: Going live
+
+Once you're confident that everything is working properly and you're ready to go live, you're done! All you have to do is let your customers know 😄 !
+
+Did this page help you?
+
+Yes
+
+No
